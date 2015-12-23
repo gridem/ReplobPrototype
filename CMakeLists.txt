@@ -1,0 +1,97 @@
+# Copyright 2015 Grigory Demchenko (aka gridem)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+project(Replob)
+cmake_minimum_required(VERSION 2.8)
+
+option(STATIC_ALL "Use static libraries" ON)
+option(LOG_MUTEX "Use log output under mutex" ON)
+option(LOG_DEBUG "Use debug output" ON)
+
+if(LOG_MUTEX)
+    add_definitions(-DflagLOG_MUTEX)
+endif()
+
+if(LOG_DEBUG)
+    add_definitions(-DflagLOG_DEBUG)
+endif()
+
+if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    set(GCC_LIKE_COMPILER ON)
+endif()
+
+if(NOT MSVC AND NOT GCC_LIKE_COMPILER)
+    message(FATAL_ERROR "Supports only gcc, clang or msvc compilers")
+endif()
+
+if(STATIC_ALL)
+    set(Boost_USE_STATIC_LIBS ON)
+    set(Boost_USE_STATIC_RUNTIME ON)
+    if(MSVC)
+        set(MSVC_RUNTIME static)
+    endif()
+    if(GCC_LIKE_COMPILER)
+        set(CMAKE_EXE_LINKER_FLAGS "-static -Wl,--whole-archive -lpthread -Wl,--no-whole-archive")
+    endif()
+else()
+    set(Boost_USE_STATIC_LIBS OFF)
+    set(Boost_USE_STATIC_RUNTIME OFF)
+    if(MSVC)
+        set(MSVC_RUNTIME dynamic)
+    endif()
+    if(GCC_LIKE_COMPILER)
+        set(CMAKE_EXE_LINKER_FLAGS "")
+    endif()
+endif()
+
+if(MSVC)
+    add_definitions(-DflagMSC)
+    add_definitions(-D_WIN32_WINNT=0x0501)
+    add_definitions(-DBOOST_ASIO_HAS_MOVE)
+    #set(CMAKE_EXE_LINKER_FLAGS "/FIXED")
+    #set(CMAKE_SHARED_LINKER_FLAGS "/FIXED")
+    #set(CMAKE_MODULE_LINKER_FLAGS "/FIXED")
+    include(MSVCRuntime.cmake)
+    configure_msvc_runtime()
+endif()
+
+if(GCC_LIKE_COMPILER)
+    add_definitions(-std=c++14 -pthread)
+    add_definitions(-DflagGCC_LIKE)
+    if("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+        add_definitions(-stdlib=libc++)
+    endif()
+    if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
+        add_definitions(-fext-numeric-literals)
+    endif()
+    if(MINGW)
+        set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} -lWs2_32 -lMswsock")
+    endif()
+    #find_package(Threads)
+endif()
+
+set(Boost_USE_MULTITHREADED ON)
+
+find_package(Boost 1.56 REQUIRED COMPONENTS context system date_time regex)
+
+file(GLOB SYNCA_SRC src/*)
+file(GLOB_RECURSE SYNCA_HDR include/*)
+
+include_directories(include ${Boost_INCLUDE_DIR})
+
+add_library(synca ${SYNCA_SRC} ${SYNCA_HDR})
+target_link_libraries(synca ${Boost_LIBRARIES})
+
+add_subdirectory(tests)
+add_subdirectory(examples)
